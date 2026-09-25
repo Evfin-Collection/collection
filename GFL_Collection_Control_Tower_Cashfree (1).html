@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>GFL Collection Control Tower</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+body{
+    background:#f4f7fb;
+    font-family:Inter,Arial,sans-serif;
+}
+
+.sidebar{
+    width:250px;
+    min-height:100vh;
+    background:#111827;
+    color:white;
+}
+
+.sidebar button{
+    width:100%;
+    text-align:left;
+    padding:12px 18px;
+    border-radius:8px;
+    margin-bottom:4px;
+}
+
+.sidebar button:hover{
+    background:#1f2937;
+}
+
+.card{
+    background:white;
+    border-radius:14px;
+    padding:20px;
+    box-shadow:0 2px 10px rgba(0,0,0,.06);
+}
+
+.kpi{
+    font-size:28px;
+    font-weight:700;
+}
+
+.hidden{
+    display:none!important;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+th,td{
+    padding:10px;
+    border-bottom:1px solid #e5e7eb;
+    text-align:left;
+}
+
+th{
+    background:#f8fafc;
+}
+
+.badge{
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:12px;
+    background:#e5e7eb;
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- =====================================================
+LOGIN
+===================================================== -->
+
+<div id="loginScreen"
+     class="min-h-screen flex items-center justify-center">
+
+    <div class="card w-full max-w-md">
+
+        <div class="text-center mb-6">
+
+            <div class="text-3xl font-bold">
+                GFL Collection
+            </div>
+
+            <p class="text-gray-500">
+                Collection Control Tower
+            </p>
+
+        </div>
+
+        <input
+            id="loginEmail"
+            class="w-full border rounded-lg p-3 mb-3"
+            placeholder="Email"
+            value="admin@gfl.local">
+
+        <input
+            id="loginPassword"
+            type="password"
+            class="w-full border rounded-lg p-3 mb-4"
+            placeholder="Password">
+
+        <button
+            onclick="login()"
+            class="w-full bg-blue-600 text-white p-3 rounded-lg">
+
+            Login
+
+        </button>
+
+        <p id="loginMessage"
+           class="text-red-500 text-sm mt-3"></p>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+APPLICATION
+===================================================== -->
+
+<div id="app" class="hidden">
+
+<div class="flex">
+
+<!-- SIDEBAR -->
+
+<aside class="sidebar p-4">
+
+    <h1 class="text-xl font-bold mb-6">
+        GFL Control Tower
+    </h1>
+
+    <button onclick="showPage('dashboard')">
+        📊 Dashboard
+    </button>
+
+    <button onclick="showPage('cases')">
+        📁 My Cases
+    </button>
+
+    <button onclick="showPage('allocation')">
+        👥 Allocation
+    </button>
+
+    <button onclick="showPage('payments')">
+        💰 Payments
+    </button>
+
+    <button onclick="showPage('ptp')">
+        🤝 PTP
+    </button>
+
+    <button onclick="showPage('ots')">
+        📝 OTS
+    </button>
+
+    <button onclick="showPage('repo')">
+        🚗 Repo
+    </button>
+
+    <button onclick="showPage('legal')">
+        ⚖️ Legal
+    </button>
+
+    <button onclick="showPage('reports')">
+        📑 Reports
+    </button>
+
+    <button id="dataCenterMenu"
+            onclick="showPage('dataCenter')">
+        🗄️ Data Center
+    </button>
+
+    <button onclick="showPage('feedback')">
+        💬 Feedback
+    </button>
+
+    <hr class="my-5">
+
+    <button id="adminMenu"
+            onclick="showPage('admin')">
+
+        ⚙️ Admin
+
+    </button>
+
+    <button onclick="logout()">
+        🚪 Logout
+    </button>
+
+</aside>
+
+
+<!-- MAIN -->
+
+<main class="flex-1 p-6">
+
+<!-- HEADER -->
+
+<div class="flex justify-between items-center mb-6">
+
+    <div>
+
+        <h2 id="pageTitle"
+            class="text-2xl font-bold">
+
+            Collection Dashboard
+
+        </h2>
+
+        <p id="userInfo"
+           class="text-gray-500">
+
+        </p>
+
+    </div>
+
+    <div id="currentDate"
+         class="text-gray-500">
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+DASHBOARD
+===================================================== -->
+
+<section id="dashboard" class="page">
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+<div class="card">
+    <p class="text-gray-500">Total Cases</p>
+    <div id="kpiCases" class="kpi">0</div>
+</div>
+
+<div class="card">
+    <p class="text-gray-500">Outstanding</p>
+    <div id="kpiOutstanding" class="kpi">₹0</div>
+</div>
+
+<div class="card">
+    <p class="text-gray-500">Collected</p>
+    <div id="kpiCollected" class="kpi">₹0</div>
+</div>
+
+<div class="card">
+    <p class="text-gray-500">Unpaid Cases</p>
+    <div id="kpiUnpaid" class="kpi">0</div>
+</div>
+
+</div>
+
+
+<div class="grid lg:grid-cols-2 gap-6 mt-6">
+
+<div class="card">
+
+<h3 class="font-bold mb-4">
+Collection Status
+</h3>
+
+<canvas id="collectionChart"></canvas>
+
+</div>
+
+
+<div class="card">
+
+<h3 class="font-bold mb-4">
+Bucket Distribution
+</h3>
+
+<canvas id="bucketChart"></canvas>
+
+</div>
+
+</div>
+
+
+<div class="card mt-6">
+
+<h3 class="font-bold mb-4">
+Collection Control Tower
+</h3>
+
+<div class="grid md:grid-cols-4 gap-4">
+
+<div>
+<span class="text-gray-500">
+Allocated
+</span>
+<div id="allocatedCases"
+     class="text-xl font-bold">
+0
+</div>
+</div>
+
+<div>
+<span class="text-gray-500">
+Unallocated
+</span>
+<div id="unallocatedCases"
+     class="text-xl font-bold">
+0
+</div>
+</div>
+
+<div>
+<span class="text-gray-500">
+High Risk DPD
+</span>
+<div id="highRiskCases"
+     class="text-xl font-bold">
+0
+</div>
+</div>
+
+<div>
+<span class="text-gray-500">
+Partial
+</span>
+<div id="partialCases"
+     class="text-xl font-bold">
+0
+</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+CASES
+===================================================== -->
+
+<section id="cases" class="page hidden">
+
+<div class="card">
+
+<div class="flex gap-2 mb-5">
+
+<input
+id="caseSearch"
+class="flex-1 border rounded-lg p-3"
+placeholder="Search LAN / customer / mobile">
+
+<button
+onclick="searchCases()"
+class="bg-blue-600 text-white px-5 rounded-lg">
+
+Search
+
+</button>
+
+</div>
+
+<div class="overflow-auto">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>LAN</th>
+<th>Customer</th>
+<th>Mobile</th>
+<th>DPD</th>
+<th>Bucket</th>
+<th>Outstanding</th>
+<th>Status</th>
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+<tbody id="caseTable"></tbody>
+
+</table>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+CASE DETAIL
+===================================================== -->
+
+<section id="caseDetail"
+         class="page hidden">
+
+<div class="card">
+
+<div class="flex justify-between">
+
+<div>
+
+<h3 id="detailCustomer"
+    class="text-xl font-bold">
+
+</h3>
+
+<p id="detailLan"
+   class="text-gray-500">
+
+</p>
+
+</div>
+
+<button onclick="showPage('cases')"
+        class="border px-4 py-2 rounded-lg">
+
+Back
+
+</button>
+
+</div>
+
+
+<div class="grid md:grid-cols-4 gap-4 mt-6">
+
+<div>
+<p class="text-gray-500">DPD</p>
+<b id="detailDPD"></b>
+</div>
+
+<div>
+<p class="text-gray-500">Bucket</p>
+<b id="detailBucket"></b>
+</div>
+
+<div>
+<p class="text-gray-500">POS</p>
+<b id="detailPOS"></b>
+</div>
+
+<div>
+<p class="text-gray-500">Outstanding</p>
+<b id="detailOutstanding"></b>
+</div>
+
+</div>
+
+
+<div class="flex flex-wrap gap-2 mt-8">
+
+<button
+onclick="openPTP()"
+class="bg-blue-600 text-white px-4 py-2 rounded-lg">
+
+PTP
+
+</button>
+
+<button
+onclick="openOTS()"
+class="bg-purple-600 text-white px-4 py-2 rounded-lg">
+
+Raise OTS
+
+</button>
+
+<button
+onclick="openPayment()"
+class="bg-green-600 text-white px-4 py-2 rounded-lg">
+
+Payment
+
+</button>
+
+<button
+onclick="openFeedback()"
+class="bg-gray-700 text-white px-4 py-2 rounded-lg">
+
+Feedback
+
+</button>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+ALLOCATION
+===================================================== -->
+
+<section id="allocation"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-4">
+Allocation Management
+</h3>
+
+<p class="text-gray-500 mb-5">
+Bulk allocation and reallocation module.
+</p>
+
+<input type="file"
+       id="allocationFile"
+       accept=".xlsx,.xls,.csv"
+       class="border p-2">
+
+<button
+onclick="uploadAllocation()"
+class="bg-blue-600 text-white px-5 py-2 rounded-lg ml-2">
+
+Upload
+
+</button>
+
+</div>
+
+<div class="card mt-5">
+
+<h3 class="font-bold mb-4">
+Required Allocation Fields
+</h3>
+
+<div class="text-sm text-gray-600">
+
+Case ID • LAN • Customer ID • Customer Name • State • Zone
+• Branch • Product • DPD • Bucket • POS • Outstanding
+• Agency Code • Agency Name • TL ID • TL Name
+• Officer ID • Officer Name • Allocation Date
+• Allocation Type • Allocation Status
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+PAYMENTS
+===================================================== -->
+
+<section id="payments"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Payment Management
+</h3>
+
+<div class="grid md:grid-cols-4 gap-4">
+
+<div>
+<label>LAN</label>
+<input id="paymentLan"
+       class="w-full border p-2 rounded">
+</div>
+
+<div>
+<label>Amount</label>
+<input id="paymentAmount"
+       type="number"
+       class="w-full border p-2 rounded">
+</div>
+
+<div>
+<label>Mode</label>
+<select id="paymentMode"
+        class="w-full border p-2 rounded">
+
+<option>UPI</option>
+<option>ENACH</option>
+<option>CASH</option>
+<option>CHEQUE</option>
+<option>BANK_TRANSFER</option>
+
+</select>
+</div>
+
+<div>
+<label>Reference</label>
+<input id="paymentRef"
+       class="w-full border p-2 rounded">
+</div>
+
+</div>
+
+<button
+onclick="savePayment()"
+class="bg-green-600 text-white px-5 py-2 rounded-lg mt-5">
+
+Save Payment
+
+</button>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+PTP
+===================================================== -->
+
+<section id="ptp"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Raise PTP
+</h3>
+
+<input id="ptpLan"
+       class="w-full border p-3 rounded mb-3"
+       placeholder="LAN">
+
+<input id="ptpAmount"
+       type="number"
+       class="w-full border p-3 rounded mb-3"
+       placeholder="PTP Amount">
+
+<input id="ptpDate"
+       type="date"
+       class="w-full border p-3 rounded mb-3">
+
+<select id="ptpMode"
+        class="w-full border p-3 rounded mb-3">
+
+<option>UPI</option>
+<option>ENACH</option>
+<option>CASH</option>
+<option>BANK_TRANSFER</option>
+
+</select>
+
+<textarea id="ptpRemarks"
+          class="w-full border p-3 rounded"
+          placeholder="Remarks"></textarea>
+
+<button
+onclick="savePTP()"
+class="bg-blue-600 text-white px-5 py-2 rounded-lg mt-4">
+
+Create PTP
+
+</button>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+OTS
+===================================================== -->
+
+<section id="ots"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Raise OTS Request
+</h3>
+
+<div class="grid md:grid-cols-2 gap-4">
+
+<input id="otsLan"
+       class="border p-3 rounded"
+       placeholder="Loan / LAN">
+
+<input id="otsOutstanding"
+       type="number"
+       class="border p-3 rounded"
+       placeholder="Outstanding">
+
+<input id="otsPOS"
+       type="number"
+       class="border p-3 rounded"
+       placeholder="POS">
+
+<input id="otsSettlement"
+       type="number"
+       class="border p-3 rounded"
+       placeholder="Proposed Settlement">
+
+<input id="otsValidity"
+       type="date"
+       class="border p-3 rounded">
+
+</div>
+
+<textarea id="otsReason"
+          class="w-full border p-3 rounded mt-4"
+          placeholder="OTS Reason"></textarea>
+
+<textarea id="otsRemarks"
+          class="w-full border p-3 rounded mt-4"
+          placeholder="Remarks"></textarea>
+
+<button
+onclick="saveOTS()"
+class="bg-purple-600 text-white px-5 py-2 rounded-lg mt-4">
+
+Submit OTS
+
+</button>
+
+</div>
+
+
+<div class="card mt-5">
+
+<h3 class="font-bold">
+OTS Workflow
+</h3>
+
+<p class="text-gray-500 mt-2">
+
+Raise OTS → Approval → Approved/Rejected →
+Payment → Settlement Closure
+
+</p>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+REPO
+===================================================== -->
+
+<section id="repo"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Repo Management
+</h3>
+
+<div class="grid md:grid-cols-3 gap-4">
+
+<div class="card bg-gray-50">
+<div class="text-gray-500">Repo Cases</div>
+<div class="text-2xl font-bold">0</div>
+</div>
+
+<div class="card bg-gray-50">
+<div class="text-gray-500">Yard Stock</div>
+<div class="text-2xl font-bold">0</div>
+</div>
+
+<div class="card bg-gray-50">
+<div class="text-gray-500">Sale Pending</div>
+<div class="text-2xl font-bold">0</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+LEGAL
+===================================================== -->
+
+<section id="legal"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Legal Management
+</h3>
+
+<div class="grid md:grid-cols-3 gap-4">
+
+<div class="card bg-gray-50">
+DN Issued
+<div class="text-2xl font-bold">0</div>
+</div>
+
+<div class="card bg-gray-50">
+LRN Issued
+<div class="text-2xl font-bold">0</div>
+</div>
+
+<div class="card bg-gray-50">
+Section 25
+<div class="text-2xl font-bold">0</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+REPORTS
+===================================================== -->
+
+<section id="reports"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Reports
+</h3>
+
+<div class="grid md:grid-cols-3 gap-3">
+
+<button class="border p-3 rounded">
+Portfolio Report
+</button>
+
+<button class="border p-3 rounded">
+Allocation Report
+</button>
+
+<button class="border p-3 rounded">
+Collection Report
+</button>
+
+<button class="border p-3 rounded">
+PTP Report
+</button>
+
+<button class="border p-3 rounded">
+Bounce Report
+</button>
+
+<button class="border p-3 rounded">
+Payment Report
+</button>
+
+<button class="border p-3 rounded">
+OTS Report
+</button>
+
+<button class="border p-3 rounded">
+Repo Report
+</button>
+
+<button class="border p-3 rounded">
+Legal Report
+</button>
+
+</div>
+
+</div>
+
+</section>
+
+
+
+<!-- =====================================================
+DATA CENTER
+===================================================== -->
+
+<section id="dataCenter" class="page hidden">
+
+<div class="mb-5">
+    <h3 class="text-xl font-bold">Data Center</h3>
+    <p class="text-gray-500 mt-1">
+        Upload and download collection source files. Cashfree upload accepts only new Order IDs.
+    </p>
+</div>
+
+<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
+
+    <div class="card">
+        <h4 class="font-bold text-lg">Collectable Base</h4>
+        <p class="text-sm text-gray-500 mt-1 mb-4">
+            Upload collectable base data.
+        </p>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('collection_cases')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('collection_cases', this.files[0])">
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="font-bold text-lg">Digio eNACH</h4>
+        <p class="text-sm text-gray-500 mt-1 mb-4">
+            Upload Digio eNACH file.
+        </p>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('digio_enach')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('digio_enach', this.files[0])">
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="font-bold text-lg">Digio UPI</h4>
+        <p class="text-sm text-gray-500 mt-1 mb-4">
+            Upload Digio UPI file.
+        </p>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('digio_upi')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('digio_upi', this.files[0])">
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="flex justify-between items-start gap-3">
+            <div>
+                <h4 class="font-bold text-lg">Cashfree</h4>
+                <p class="text-sm text-gray-500 mt-1 mb-4">
+                    Upload Cashfree transactions. Existing Order IDs will be skipped automatically.
+                </p>
+            </div>
+            <span class="badge">Unique Order ID</span>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('cashfree_transactions')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('cashfree_transactions', this.files[0])">
+            </label>
+        </div>
+
+        <p id="cashfreeUploadStatus" class="text-sm mt-3 text-gray-600"></p>
+    </div>
+
+    <div class="card">
+        <h4 class="font-bold text-lg">Manual Paid</h4>
+        <p class="text-sm text-gray-500 mt-1 mb-4">
+            Upload manually received payment data.
+        </p>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('manual_paid')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('manual_paid', this.files[0])">
+            </label>
+        </div>
+    </div>
+
+</div>
+
+<div class="card mt-5">
+    <h4 class="font-bold mb-2">Cashfree upload rule</h4>
+    <ul class="text-sm text-gray-600 list-disc pl-5 space-y-1">
+        <li><b>Order ID</b> is mandatory.</li>
+        <li>Duplicate Order IDs inside the same file are removed.</li>
+        <li>Order IDs already present in Supabase are skipped.</li>
+        <li>The database should also have a UNIQUE constraint on <b>order_id</b>.</li>
+        <li>This page is for file upload. True automatic Cashfree API sync requires a secure backend/Edge Function; never put Cashfree secret credentials in this HTML.</li>
+    </ul>
+</div>
+
+</section>
+
+
+<!-- =====================================================
+FEEDBACK
+===================================================== -->
+
+<section id="feedback"
+         class="page hidden">
+
+<div class="card max-w-2xl">
+
+<h3 class="text-xl font-bold mb-5">
+Feedback / Issue
+</h3>
+
+<input id="feedbackSubject"
+       class="w-full border p-3 rounded mb-3"
+       placeholder="Subject">
+
+<select id="feedbackPriority"
+        class="w-full border p-3 rounded mb-3">
+
+<option>LOW</option>
+<option selected>MEDIUM</option>
+<option>HIGH</option>
+<option>CRITICAL</option>
+
+</select>
+
+<textarea id="feedbackDescription"
+          class="w-full border p-3 rounded"
+          rows="5"
+          placeholder="Describe your feedback / issue"></textarea>
+
+<button
+onclick="saveFeedback()"
+class="bg-gray-800 text-white px-5 py-2 rounded-lg mt-4">
+
+Submit
+
+</button>
+
+</div>
+
+</section>
+
+
+<!-- =====================================================
+ADMIN
+===================================================== -->
+
+<section id="admin"
+         class="page hidden">
+
+<div class="card">
+
+<h3 class="text-xl font-bold mb-5">
+Admin Control Center
+</h3>
+
+<div class="grid md:grid-cols-4 gap-4">
+
+<div class="card bg-blue-50">
+Users
+<div id="adminUsers"
+     class="text-2xl font-bold">
+0
+</div>
+</div>
+
+<div class="card bg-green-50">
+Agencies
+<div id="adminAgencies"
+     class="text-2xl font-bold">
+0
+</div>
+</div>
+
+<div class="card bg-purple-50">
+Cases
+<div id="adminCases"
+     class="text-2xl font-bold">
+0
+</div>
+</div>
+
+<div class="card bg-yellow-50">
+OTS Pending
+<div id="adminOTS"
+     class="text-2xl font-bold">
+0
+</div>
+</div>
+
+</div>
+
+</div>
+
+
+<div class="card mt-5">
+
+<h3 class="font-bold mb-4">
+User Access Management
+</h3>
+
+<div class="grid md:grid-cols-3 gap-3">
+
+<input id="newUserName"
+       class="border p-3 rounded"
+       placeholder="User Name">
+
+<input id="newUserEmail"
+       class="border p-3 rounded"
+       placeholder="Email">
+
+<select id="newUserRole"
+        class="border p-3 rounded">
+
+<option>COLLECTION_OFFICER</option>
+<option>COLLECTION_TL</option>
+<option>AGENCY_MANAGER</option>
+<option>NCH</option>
+<option>ZCH</option>
+<option>SCH</option>
+<option>MIS_USER</option>
+<option>LEGAL_USER</option>
+<option>REPO_MANAGER</option>
+<option>FINANCE_USER</option>
+
+</select>
+
+</div>
+
+<p class="text-sm text-gray-500 mt-3">
+
+For production, create/invite the Auth user through
+Supabase Auth and then assign the role in this profile table.
+
+</p>
+
+</div>
+
+</section>
+
+</main>
+
+</div>
+
+</div>
+
+
+<script>
+
+/* ============================================================
+SUPABASE CONFIGURATION
+============================================================ */
+
+const SUPABASE_URL =
+"https://YOUR-PROJECT.supabase.co";
+
+const SUPABASE_KEY =
+"YOUR-PUBLISHABLE-KEY";
+
+const { createClient } = supabase;
+
+const db = createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+);
+
+
+/* ============================================================
+GLOBAL VARIABLES
+============================================================ */
+
+let currentUser = null;
+let currentProfile = null;
+let selectedCase = null;
+
+let collectionChart = null;
+let bucketChart = null;
+
+
+/* ============================================================
+LOGIN
+============================================================ */
+
+async function login(){
+
+    const email =
+        document.getElementById("loginEmail").value.trim();
+
+    const password =
+        document.getElementById("loginPassword").value;
+
+    const message =
+        document.getElementById("loginMessage");
+
+    message.textContent = "";
+
+    const { data, error } =
+        await db.auth.signInWithPassword({
+            email,
+            password
+        });
+
+    if(error){
+
+        message.textContent =
+            error.message;
+
+        return;
+    }
+
+    currentUser = data.user;
+
+    await loadProfile();
+
+}
+
+
+/* ============================================================
+LOAD PROFILE
+============================================================ */
+
+async function loadProfile(){
+
+    const { data, error } =
+        await db
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .single();
+
+    if(error){
+
+        alert(
+            "Profile not found. Create profile row in Supabase."
+        );
+
+        return;
+    }
+
+    currentProfile = data;
+
+    document
+        .getElementById("loginScreen")
+        .classList.add("hidden");
+
+    document
+        .getElementById("app")
+        .classList.remove("hidden");
+
+    document
+        .getElementById("userInfo")
+        .textContent =
+        `${data.full_name} • ${data.role}`;
+
+    const userRole = String(data.role || "").toUpperCase();
+
+    if(userRole !== "ADMIN"){
+
+        document
+            .getElementById("adminMenu")
+            .classList.add("hidden");
+
+        document
+            .getElementById("dataCenterMenu")
+            .classList.add("hidden");
+
+    }
+
+    showPage("dashboard");
+
+    loadDashboard();
+
+}
+
+
+/* ============================================================
+LOGOUT
+============================================================ */
+
+async function logout(){
+
+    await db.auth.signOut();
+
+    location.reload();
+
+}
+
+
+/* ============================================================
+PAGE NAVIGATION
+============================================================ */
+
+function showPage(page){
+
+    document
+        .querySelectorAll(".page")
+        .forEach(x =>
+            x.classList.add("hidden")
+        );
+
+    const element =
+        document.getElementById(page);
+
+    if(element)
+        element.classList.remove("hidden");
+
+    const titles = {
+
+        dashboard:
+            "Collection Control Tower",
+
+        cases:
+            "Case Management",
+
+        caseDetail:
+            "Case Details",
+
+        allocation:
+            "Allocation Management",
+
+        payments:
+            "Payment Management",
+
+        ptp:
+            "PTP Management",
+
+        ots:
+            "OTS Management",
+
+        repo:
+            "Repo Management",
+
+        legal:
+            "Legal Management",
+
+        reports:
+            "Reports",
+
+        dataCenter:
+            "Data Center",
+
+        feedback:
+            "Feedback",
+
+        admin:
+            "Admin Control Center"
+
+    };
+
+    document
+        .getElementById("pageTitle")
+        .textContent =
+        titles[page] || page;
+
+    if(page === "cases")
+        searchCases();
+
+    if(page === "admin")
+        loadAdminStats();
+
+}
+
+
+/* ============================================================
+DASHBOARD
+============================================================ */
+
+async function loadDashboard(){
+
+    const { data, error } =
+        await db
+        .from("v_collection_control_tower")
+        .select("*")
+        .single();
+
+    if(error){
+
+        console.error(error);
+        return;
+    }
+
+    document
+        .getElementById("kpiCases")
+        .textContent =
+        data.total_cases || 0;
+
+    document
+        .getElementById("kpiOutstanding")
+        .textContent =
+        money(data.total_outstanding);
+
+    document
+        .getElementById("kpiUnpaid")
+        .textContent =
+        data.unpaid_cases || 0;
+
+    document
+        .getElementById("allocatedCases")
+        .textContent =
+        data.allocated_cases || 0;
+
+    document
+        .getElementById("unallocatedCases")
+        .textContent =
+        data.unallocated_cases || 0;
+
+    document
+        .getElementById("highRiskCases")
+        .textContent =
+        data.high_risk_cases || 0;
+
+    document
+        .getElementById("partialCases")
+        .textContent =
+        data.partial_cases || 0;
+
+
+    const { data: payments } =
+        await db
+        .from("payments")
+        .select("amount")
+        .eq("payment_status","SUCCESS");
+
+    const collected =
+        (payments || [])
+        .reduce(
+            (sum,row) =>
+            sum + Number(row.amount || 0),
+            0
+        );
+
+    document
+        .getElementById("kpiCollected")
+        .textContent =
+        money(collected);
+
+
+    await loadCharts();
+
+}
+
+
+/* ============================================================
+CHARTS
+============================================================ */
+
+async function loadCharts(){
+
+    const { data: cases } =
+        await db
+        .from("collection_cases")
+        .select("collection_status,bucket");
+
+    const statusCount = {};
+
+    const bucketCount = {};
+
+    (cases || []).forEach(row => {
+
+        const status =
+            row.collection_status || "UNKNOWN";
+
+        const bucket =
+            row.bucket || "UNKNOWN";
+
+        statusCount[status] =
+            (statusCount[status] || 0) + 1;
+
+        bucketCount[bucket] =
+            (bucketCount[bucket] || 0) + 1;
+
+    });
+
+
+    if(collectionChart)
+        collectionChart.destroy();
+
+    if(bucketChart)
+        bucketChart.destroy();
+
+
+    collectionChart =
+        new Chart(
+            document
+                .getElementById("collectionChart"),
+            {
+                type:"doughnut",
+
+                data:{
+                    labels:
+                        Object.keys(statusCount),
+
+                    datasets:[{
+                        data:
+                            Object.values(statusCount)
+                    }]
+                }
+            }
+        );
+
+
+    bucketChart =
+        new Chart(
+            document
+                .getElementById("bucketChart"),
+            {
+                type:"bar",
+
+                data:{
+                    labels:
+                        Object.keys(bucketCount),
+
+                    datasets:[{
+                        label:"Cases",
+                        data:
+                            Object.values(bucketCount)
+                    }]
+                },
+
+                options:{
+                    responsive:true
+                }
+            }
+        );
+
+}
+
+
+/* ============================================================
+CASE SEARCH
+============================================================ */
+
+async function searchCases(){
+
+    const search =
+        document
+        .getElementById("caseSearch")
+        .value
+        .trim();
+
+    let query =
+        db
+        .from("collection_cases")
+        .select("*")
+        .order("created_at",
+               {ascending:false})
+        .limit(100);
+
+    if(search){
+
+        query =
+            query.or(
+                `lan.ilike.%${search}%,` +
+                `customer_name.ilike.%${search}%,` +
+                `customer_phone.ilike.%${search}%`
+            );
+
+    }
+
+    const { data, error } =
+        await query;
+
+    if(error){
+
+        console.error(error);
+        return;
+    }
+
+    const tbody =
+        document.getElementById("caseTable");
+
+    tbody.innerHTML = "";
+
+    (data || []).forEach(row => {
+
+        tbody.innerHTML += `
+
+        <tr>
+
+            <td>${safe(row.lan)}</td>
+
+            <td>${safe(row.customer_name)}</td>
+
+            <td>${safe(row.customer_phone)}</td>
+
+            <td>${row.dpd || 0}</td>
+
+            <td>
+                <span class="badge">
+                    ${safe(row.bucket)}
+                </span>
+            </td>
+
+            <td>
+                ${money(row.outstanding)}
+            </td>
+
+            <td>
+                ${safe(row.collection_status)}
+            </td>
+
+            <td>
+
+                <button
+                    onclick='openCase(${JSON.stringify(row)})'
+                    class="text-blue-600 font-semibold">
+
+                    Open
+
+                </button>
+
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+
+
+/* ============================================================
+CASE DETAIL
+============================================================ */
+
+function openCase(row){
+
+    selectedCase = row;
+
+    document
+        .getElementById("detailCustomer")
+        .textContent =
+        row.customer_name || "";
+
+    document
+        .getElementById("detailLan")
+        .textContent =
+        "LAN: " + (row.lan || "");
+
+    document
+        .getElementById("detailDPD")
+        .textContent =
+        row.dpd || 0;
+
+    document
+        .getElementById("detailBucket")
+        .textContent =
+        row.bucket || "";
+
+    document
+        .getElementById("detailPOS")
+        .textContent =
+        money(row.pos);
+
+    document
+        .getElementById("detailOutstanding")
+        .textContent =
+        money(row.outstanding);
+
+    showPage("caseDetail");
+
+}
+
+
+/* ============================================================
+PTP
+============================================================ */
+
+function openPTP(){
+
+    showPage("ptp");
+
+    if(selectedCase){
+
+        document
+            .getElementById("ptpLan")
+            .value =
+            selectedCase.lan;
+
+    }
+
+}
+
+
+async function savePTP(){
+
+    const lan =
+        document
+        .getElementById("ptpLan")
+        .value;
+
+    const amount =
+        Number(
+            document
+            .getElementById("ptpAmount")
+            .value
+        );
+
+    const date =
+        document
+        .getElementById("ptpDate")
+        .value;
+
+    const mode =
+        document
+        .getElementById("ptpMode")
+        .value;
+
+    const remarks =
+        document
+        .getElementById("ptpRemarks")
+        .value;
+
+
+    const { data: caseRow } =
+        await db
+        .from("collection_cases")
+        .select("id")
+        .eq("lan",lan)
+        .single();
+
+
+    if(!caseRow){
+
+        alert("LAN not found");
+        return;
+
+    }
+
+
+    const { error } =
+        await db
+        .from("ptps")
+        .insert({
+
+            case_id:
+                caseRow.id,
+
+            lan,
+
+            ptp_date:
+                date,
+
+            ptp_amount:
+                amount,
+
+            payment_mode:
+                mode,
+
+            remarks,
+
+            created_by:
+                currentUser.id
+
+        });
+
+
+    if(error){
+
+        alert(error.message);
+        return;
+
+    }
+
+    alert("PTP created successfully");
+
+}
+
+
+/* ============================================================
+OTS
+============================================================ */
+
+function openOTS(){
+
+    showPage("ots");
+
+    if(selectedCase){
+
+        document
+            .getElementById("otsLan")
+            .value =
+            selectedCase.lan;
+
+        document
+            .getElementById("otsOutstanding")
+            .value =
+            selectedCase.outstanding || 0;
+
+        document
+            .getElementById("otsPOS")
+            .value =
+            selectedCase.pos || 0;
+
+    }
+
+}
+
+
+async function saveOTS(){
+
+    const lan =
+        document
+        .getElementById("otsLan")
+        .value;
+
+    const outstanding =
+        Number(
+            document
+            .getElementById("otsOutstanding")
+            .value
+        );
+
+    const pos =
+        Number(
+            document
+            .getElementById("otsPOS")
+            .value
+        );
+
+    const settlement =
+        Number(
+            document
+            .getElementById("otsSettlement")
+            .value
+        );
+
+    const validity =
+        document
+        .getElementById("otsValidity")
+        .value;
+
+    const reason =
+        document
+        .getElementById("otsReason")
+        .value;
+
+    const remarks =
+        document
+        .getElementById("otsRemarks")
+        .value;
+
+
+    const { data: caseRow } =
+        await db
+        .from("collection_cases")
+        .select("id,customer_name,emi,dpd,bucket")
+        .eq("lan",lan)
+        .single();
+
+
+    if(!caseRow){
+
+        alert("LAN not found");
+        return;
+
+    }
+
+
+    const waiver =
+        Math.max(
+            0,
+            outstanding - settlement
+        );
+
+    const waiverPct =
+        outstanding > 0
+        ? (waiver / outstanding) * 100
+        : 0;
+
+
+    const { error } =
+        await db
+        .from("ots_requests")
+        .insert({
+
+            case_id:
+                caseRow.id,
+
+            loan_number:
+                lan,
+
+            customer_name:
+                caseRow.customer_name,
+
+            outstanding,
+
+            pos,
+
+            emi:
+                caseRow.emi || 0,
+
+            dpd:
+                caseRow.dpd || 0,
+
+            bucket:
+                caseRow.bucket,
+
+            proposed_settlement_amount:
+                settlement,
+
+            waiver_percentage:
+                waiverPct,
+
+            validity_date:
+                validity,
+
+            reason,
+
+            remarks,
+
+            raised_by:
+                currentUser.id
+
+        });
+
+
+    if(error){
+
+        alert(error.message);
+        return;
+
+    }
+
+    alert(
+        "OTS submitted for approval successfully"
+    );
+
+}
+
+
+/* ============================================================
+PAYMENT
+============================================================ */
+
+function openPayment(){
+
+    showPage("payments");
+
+    if(selectedCase){
+
+        document
+            .getElementById("paymentLan")
+            .value =
+            selectedCase.lan;
+
+    }
+
+}
+
+
+async function savePayment(){
+
+    const lan =
+        document
+        .getElementById("paymentLan")
+        .value;
+
+    const amount =
+        Number(
+            document
+            .getElementById("paymentAmount")
+            .value
+        );
+
+    const mode =
+        document
+        .getElementById("paymentMode")
+        .value;
+
+    const ref =
+        document
+        .getElementById("paymentRef")
+        .value;
+
+
+    const { error } =
+        await db
+        .from("payments")
+        .insert({
+
+            lan,
+
+            amount,
+
+            payment_mode:
+                mode,
+
+            transaction_reference:
+                ref,
+
+            payment_status:
+                "SUCCESS",
+
+            collected_by:
+                currentUser.id
+
+        });
+
+
+    if(error){
+
+        alert(error.message);
+        return;
+
+    }
+
+    alert("Payment saved");
+
+    loadDashboard();
+
+}
+
+
+/* ============================================================
+FEEDBACK
+============================================================ */
+
+function openFeedback(){
+
+    showPage("feedback");
+
+}
+
+
+async function saveFeedback(){
+
+    const subject =
+        document
+        .getElementById("feedbackSubject")
+        .value;
+
+    const priority =
+        document
+        .getElementById("feedbackPriority")
+        .value;
+
+    const description =
+        document
+        .getElementById("feedbackDescription")
+        .value;
+
+
+    const { error } =
+        await db
+        .from("feedback")
+        .insert({
+
+            submitted_by:
+                currentUser.id,
+
+            category:
+                "GENERAL",
+
+            priority,
+
+            subject,
+
+            description
+
+        });
+
+
+    if(error){
+
+        alert(error.message);
+        return;
+
+    }
+
+    alert("Feedback submitted");
+
+}
+
+
+/* ============================================================
+ADMIN STATISTICS
+============================================================ */
+
+async function loadAdminStats(){
+
+    if(!currentProfile ||
+       String(currentProfile.role || "").toUpperCase() !== "ADMIN")
+        return;
+
+
+    const { count: users } =
+        await db
+        .from("profiles")
+        .select("*",
+                {
+                    count:"exact",
+                    head:true
+                });
+
+
+    const { count: agencies } =
+        await db
+        .from("agencies")
+        .select("*",
+                {
+                    count:"exact",
+                    head:true
+                });
+
+
+    const { count: cases } =
+        await db
+        .from("collection_cases")
+        .select("*",
+                {
+                    count:"exact",
+                    head:true
+                });
+
+
+    const { count: ots } =
+        await db
+        .from("ots_requests")
+        .select("*",
+                {
+                    count:"exact",
+                    head:true
+                })
+        .eq(
+            "status",
+            "PENDING_APPROVAL"
+        );
+
+
+    document
+        .getElementById("adminUsers")
+        .textContent =
+        users || 0;
+
+    document
+        .getElementById("adminAgencies")
+        .textContent =
+        agencies || 0;
+
+    document
+        .getElementById("adminCases")
+        .textContent =
+        cases || 0;
+
+    document
+        .getElementById("adminOTS")
+        .textContent =
+        ots || 0;
+
+}
+
+
+/* ============================================================
+DATA UPLOAD
+============================================================ */
+
+async function uploadData(){
+
+    const file =
+        document
+        .getElementById("dataFile")
+        .files[0];
+
+    const type =
+        document
+        .getElementById("uploadType")
+        .value;
+
+    const status =
+        document
+        .getElementById("uploadStatus");
+
+
+    if(!file){
+
+        status.textContent =
+            "Please select a file.";
+
+        return;
+
+    }
+
+
+    status.textContent =
+        "Reading file...";
+
+
+    const buffer =
+        await file.arrayBuffer();
+
+
+    const workbook =
+        XLSX.read(
+            buffer,
+            {type:"array"}
+        );
+
+
+    const sheet =
+        workbook
+        .Sheets[
+            workbook.SheetNames[0]
+        ];
+
+
+    const rows =
+        XLSX.utils.sheet_to_json(
+            sheet,
+            {
+                defval:""
+            }
+        );
+
+
+    if(!rows.length){
+
+        status.textContent =
+            "No data found.";
+
+        return;
+
+    }
+
+
+    status.textContent =
+        `Uploading ${rows.length} rows...`;
+
+
+    /*
+      This generic mapper works for columns whose Excel
+      headers already match the database names.
+
+      For your actual files, we should create exact
+      column mappings for each of the five sources.
+    */
+
+
+    const cleanRows =
+        rows.map(row => {
+
+            const obj = {};
+
+            Object.keys(row).forEach(key => {
+
+                const dbKey =
+                    key
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g,"_");
+
+                obj[dbKey] =
+                    row[key];
+
+            });
+
+            return obj;
+
+        });
+
+
+    const chunkSize = 500;
+
+    let uploaded = 0;
+
+
+    for(
+        let i=0;
+        i<cleanRows.length;
+        i+=chunkSize
+    ){
+
+        const chunk =
+            cleanRows.slice(
+                i,
+                i + chunkSize
+            );
+
+
+        const { error } =
+            await db
+            .from(type)
+            .insert(chunk);
+
+
+        if(error){
+
+            console.error(error);
+
+            status.textContent =
+                "Upload error: " +
+                error.message;
+
+            return;
+
+        }
+
+        uploaded += chunk.length;
+
+        status.textContent =
+            `Uploaded ${uploaded} / ${cleanRows.length}`;
+
+    }
+
+
+    status.textContent =
+        `Successfully uploaded ${uploaded} rows.`;
+
+    loadDashboard();
+
+}
+
+
+
+/* ============================================================
+DATA CENTER
+============================================================ */
+
+/*
+  Cashfree database table expected:
+  cashfree_transactions
+
+  IMPORTANT:
+  Add a UNIQUE constraint/index on order_id in Supabase.
+  The frontend also removes duplicates before insert.
+*/
+
+const DATA_CENTER_TEMPLATES = {
+
+    collection_cases: [
+        "lan","customer_name","customer_phone","state","zone",
+        "branch","product","dpd","bucket","pos","outstanding",
+        "collection_status","allocation_status","agency_code",
+        "agency_name","tl_id","tl_name","officer_id","officer_name",
+        "allocation_date"
+    ],
+
+    digio_enach: [
+        "transaction_id","lan","customer_phone","amount",
+        "transaction_date","status","mandate_status","reference","remarks"
+    ],
+
+    digio_upi: [
+        "transaction_id","lan","customer_phone","amount",
+        "transaction_date","status","reference","remarks"
+    ],
+
+    cashfree_transactions: [
+        "order_id",
+        "transaction_time",
+
+        "cashfree_order_id",
+        "amount",
+        "currency",
+        "reference",
+        "customer_phone",
+        "payment_mode",
+        "payment_status",
+        "failure_reason",
+        "refund_status",
+        "captured_status",
+        "lan"
+    ],
+
+    manual_paid: [
+        "transaction_id","lan","customer_name","customer_phone",
+        "payment_date","amount","payment_mode","reference",
+        "remarks"
+    ]
+};
+
+function normalizeHeader(value){
+
+    return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g,"_")
+        .replace(/^_+|_+$/g,"");
+
+}
+
+function normalizeRowKeys(row){
+
+    const output = {};
+
+    Object.keys(row || {}).forEach(key => {
+
+        output[normalizeHeader(key)] = row[key];
+
+    });
+
+    return output;
+}
+
+function getFirstValue(row, aliases){
+
+    for(const alias of aliases){
+
+        const key = normalizeHeader(alias);
+
+        if(row[key] !== undefined &&
+           row[key] !== null &&
+           String(row[key]).trim() !== ""){
+
+            return row[key];
+
+        }
+
+    }
+
+    return "";
+
+}
+
+function cashfreeMapRow(rawRow){
+
+    const row = normalizeRowKeys(rawRow);
+
+    return {
+
+        order_id: String(getFirstValue(row, [
+            "order_id",
+            "order id",
+            "orderid",
+            "cashfree_order_id",
+            "cashfree order id",
+            "cf_order_id",
+            "cf order id"
+        ]) || "").trim(),
+
+        transaction_time: getFirstValue(row, [
+            "transaction_time",
+            "transaction time",
+            "transaction_date",
+            "transaction date",
+            "date"
+        ]),
+
+        cashfree_order_id: getFirstValue(row, [
+            "cashfree_order_id",
+            "cashfree order id",
+            "cf_order_id",
+            "cf order id"
+        ]),
+
+        amount: getFirstValue(row, [
+            "amount",
+            "transaction_amount",
+            "transaction amount"
+        ]),
+
+        currency: getFirstValue(row, [
+            "currency"
+        ]),
+
+        reference: getFirstValue(row, [
+            "reference",
+            "payment_reference",
+            "payment reference"
+        ]),
+
+        customer_phone: getFirstValue(row, [
+            "customer_phone",
+            "customer phone",
+            "phone",
+            "mobile",
+            "customer_mobile"
+        ]),
+
+        payment_mode: getFirstValue(row, [
+            "payment_mode",
+            "payment mode",
+            "mode"
+        ]),
+
+        payment_status: getFirstValue(row, [
+            "payment_status",
+            "payment status",
+            "status"
+        ]),
+
+        failure_reason: getFirstValue(row, [
+            "failure_reason",
+            "failure reason",
+            "failure_message",
+            "failure message"
+        ]),
+
+        refund_status: getFirstValue(row, [
+            "refund_status",
+            "refund status",
+            "refund"
+        ]),
+
+        captured_status: getFirstValue(row, [
+            "captured_status",
+            "captured status",
+            "captured"
+        ]),
+
+        lan: getFirstValue(row, [
+            "lan",
+            "loan_number",
+            "loan number",
+            "loan_no",
+            "loan no"
+        ])
+    };
+
+}
+
+function downloadDataTemplate(type){
+
+    const headers =
+        DATA_CENTER_TEMPLATES[type];
+
+    if(!headers){
+
+        alert("Template not configured.");
+        return;
+
+    }
+
+    const row = {};
+
+    headers.forEach(header => {
+        row[header] = "";
+    });
+
+    const worksheet =
+        XLSX.utils.json_to_sheet([row]);
+
+    const workbook =
+        XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Template"
+    );
+
+    const fileName =
+        type === "cashfree_transactions"
+        ? "Cashfree_Transaction_Template.xlsx"
+        : `${type}_Template.xlsx`;
+
+    XLSX.writeFile(
+        workbook,
+        fileName
+    );
+
+}
+
+async function uploadDataCenter(type, file){
+
+    const status =
+        type === "cashfree_transactions"
+        ? document.getElementById("cashfreeUploadStatus")
+        : null;
+
+    if(!file){
+
+        if(status)
+            status.textContent = "Please select a file.";
+
+        else
+            alert("Please select a file.");
+
+        return;
+
+    }
+
+    if(status)
+        status.textContent = "Reading file...";
+
+    try{
+
+        const buffer =
+            await file.arrayBuffer();
+
+        const workbook =
+            XLSX.read(
+                buffer,
+                {
+                    type:"array",
+                    cellDates:true
+                }
+            );
+
+        const sheet =
+            workbook.Sheets[
+                workbook.SheetNames[0]
+            ];
+
+        let rows =
+            XLSX.utils.sheet_to_json(
+                sheet,
+                {
+                    defval:""
+                }
+            );
+
+        if(!rows.length){
+
+            if(status)
+                status.textContent = "No data found.";
+
+            else
+                alert("No data found.");
+
+            return;
+
+        }
+
+        if(type === "cashfree_transactions"){
+
+            await uploadCashfreeUnique(rows, status);
+            return;
+
+        }
+
+        const tableMap = {
+            collection_cases: "collection_cases",
+            digio_enach: "digio_enach",
+            digio_upi: "digio_upi",
+            manual_paid: "manual_paid"
+        };
+
+        const table =
+            tableMap[type];
+
+        if(!table){
+
+            throw new Error(
+                "Database table mapping not configured."
+            );
+
+        }
+
+        const cleanRows =
+            rows.map(normalizeRowKeys);
+
+        const chunkSize = 500;
+        let uploaded = 0;
+
+        for(
+            let i=0;
+            i<cleanRows.length;
+            i+=chunkSize
+        ){
+
+            const chunk =
+                cleanRows.slice(
+                    i,
+                    i + chunkSize
+                );
+
+            const { error } =
+                await db
+                .from(table)
+                .insert(chunk);
+
+            if(error)
+                throw error;
+
+            uploaded += chunk.length;
+
+        }
+
+        alert(
+            `${uploaded} rows uploaded successfully to ${table}.`
+        );
+
+        loadDashboard();
+
+    }catch(error){
+
+        console.error(error);
+
+        if(status)
+            status.textContent =
+                "Upload error: " + error.message;
+        else
+            alert(
+                "Upload error: " + error.message
+            );
+
+    }
+
+}
+
+async function uploadCashfreeUnique(rows, status){
+
+    const mappedRows = [];
+    const fileOrderIds = new Set();
+
+    let missingOrderId = 0;
+    let duplicateInFile = 0;
+
+    rows.forEach(rawRow => {
+
+        const row =
+            cashfreeMapRow(rawRow);
+
+        const orderId =
+            String(row.order_id || "").trim();
+
+        if(!orderId){
+
+            missingOrderId++;
+            return;
+
+        }
+
+        const key =
+            orderId.toLowerCase();
+
+        if(fileOrderIds.has(key)){
+
+            duplicateInFile++;
+            return;
+
+        }
+
+        fileOrderIds.add(key);
+
+        mappedRows.push(row);
+
+    });
+
+    if(!mappedRows.length){
+
+        if(status)
+            status.textContent =
+                "No valid Order ID found.";
+
+        return;
+
+    }
+
+    if(status)
+        status.textContent =
+            `Checking ${mappedRows.length} unique Order IDs...`;
+
+    const orderIds =
+        mappedRows.map(
+            row => row.order_id
+        );
+
+    /*
+      Fetch existing IDs in chunks so large Cashfree files
+      do not create an oversized URL/query.
+    */
+    const existingIds = new Set();
+
+    const checkChunkSize = 500;
+
+    for(
+        let i=0;
+        i<orderIds.length;
+        i+=checkChunkSize
+    ){
+
+        const ids =
+            orderIds.slice(
+                i,
+                i + checkChunkSize
+            );
+
+        const { data, error } =
+            await db
+            .from("cashfree_transactions")
+            .select("order_id")
+            .in("order_id", ids);
+
+        if(error)
+            throw error;
+
+        (data || []).forEach(row => {
+
+            existingIds.add(
+                String(row.order_id)
+                    .trim()
+                    .toLowerCase()
+            );
+
+        });
+
+    }
+
+    const newRows =
+        mappedRows.filter(row =>
+            !existingIds.has(
+                String(row.order_id)
+                    .trim()
+                    .toLowerCase()
+            )
+        );
+
+    const alreadyExists =
+        mappedRows.length - newRows.length;
+
+    if(!newRows.length){
+
+        if(status)
+            status.textContent =
+                `0 new rows uploaded. ${alreadyExists} Order IDs already exist; ${duplicateInFile} duplicates removed from file; ${missingOrderId} rows had no Order ID.`;
+
+        alert(
+            `Cashfree upload completed.\n\n` +
+            `New: 0\n` +
+            `Already existed: ${alreadyExists}\n` +
+            `Duplicate in file: ${duplicateInFile}\n` +
+            `Missing Order ID: ${missingOrderId}`
+        );
+
+        return;
+
+    }
+
+    let uploaded = 0;
+    const insertChunkSize = 500;
+
+    for(
+        let i=0;
+        i<newRows.length;
+        i+=insertChunkSize
+    ){
+
+        const chunk =
+            newRows.slice(
+                i,
+                i + insertChunkSize
+            );
+
+        /*
+          ignoreDuplicates requires UNIQUE(order_id)
+          in Supabase. This gives a second protection layer
+          against duplicates/race conditions.
+        */
+        const { error } =
+            await db
+            .from("cashfree_transactions")
+            .upsert(
+                chunk,
+                {
+                    onConflict:"order_id",
+                    ignoreDuplicates:true
+                }
+            );
+
+        if(error)
+            throw error;
+
+        uploaded += chunk.length;
+
+        if(status)
+            status.textContent =
+                `Cashfree upload: ${uploaded} / ${newRows.length}`;
+
+    }
+
+    const message =
+        `Cashfree upload completed.\n\n` +
+        `New uploaded: ${uploaded}\n` +
+        `Already existed: ${alreadyExists}\n` +
+        `Duplicate in file: ${duplicateInFile}\n` +
+        `Missing Order ID: ${missingOrderId}`;
+
+    if(status)
+        status.textContent =
+            message.replace(/\n\n/g," | ");
+
+    alert(message);
+
+    loadDashboard();
+
+}
+
+/* ============================================================
+ALLOCATION FILE
+============================================================ */
+
+async function uploadAllocation(){
+
+    const file =
+        document
+        .getElementById("allocationFile")
+        .files[0];
+
+    if(!file){
+
+        alert("Select allocation file");
+        return;
+
+    }
+
+    const buffer =
+        await file.arrayBuffer();
+
+    const workbook =
+        XLSX.read(
+            buffer,
+            {type:"array"}
+        );
+
+    const sheet =
+        workbook
+        .Sheets[
+            workbook.SheetNames[0]
+        ];
+
+    const rows =
+        XLSX.utils.sheet_to_json(
+            sheet,
+            {defval:""}
+        );
+
+    alert(
+        `${rows.length} allocation rows read.`
+    );
+
+    /*
+      Next version:
+      validation →
+      preview →
+      error report →
+      confirmation →
+      allocation.
+    */
+
+}
+
+
+/* ============================================================
+HELPERS
+============================================================ */
+
+function money(value){
+
+    return new Intl.NumberFormat(
+        "en-IN",
+        {
+            style:"currency",
+            currency:"INR",
+            maximumFractionDigits:0
+        }
+    ).format(
+        Number(value || 0)
+    );
+
+}
+
+
+function safe(value){
+
+    if(value === null ||
+       value === undefined)
+        return "";
+
+    return String(value)
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+
+}
+
+
+
+/* ============================================================
+AUTH SESSION
+============================================================ */
+
+async function restoreSession(){
+
+    const { data } =
+        await db.auth.getSession();
+
+    if(data && data.session){
+
+        currentUser = data.session.user;
+        await loadProfile();
+
+    }
+
+}
+
+restoreSession();
+
+document
+    .getElementById("currentDate")
+    .textContent =
+    new Date()
+    .toLocaleDateString(
+        "en-IN"
+    );
+
+</script>
+
+</body>
+</html>
