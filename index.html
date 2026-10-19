@@ -145,6 +145,18 @@ LOGIN
 </div>
 
 
+<!-- Secure password setup shown after a Supabase invitation link is opened -->
+<div id="invitePasswordScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+  <div class="card w-full max-w-md">
+    <h2 class="text-2xl font-bold mb-2">Set your EvFin password</h2>
+    <p class="text-sm text-gray-600 mb-4">Choose a personal password to finish activating your account.</p>
+    <input id="inviteNewPassword" type="password" autocomplete="new-password" class="w-full border rounded-lg p-3 mb-3" placeholder="New password (minimum 8 characters)">
+    <input id="inviteConfirmPassword" type="password" autocomplete="new-password" class="w-full border rounded-lg p-3 mb-3" placeholder="Confirm new password">
+    <button onclick="finishInvitePasswordSetup()" class="w-full bg-blue-600 text-white p-3 rounded-lg">Save password and continue</button>
+    <p id="invitePasswordMessage" class="text-sm mt-3" aria-live="polite"></p>
+  </div>
+</div>
+
 <!-- =====================================================
 APPLICATION
 ===================================================== -->
@@ -1025,10 +1037,10 @@ DATA CENTER
     <div class="card">
         <h4 class="font-bold text-lg">User Listing</h4>
         <p class="text-sm text-gray-500 mt-1 mb-2">
-            Download the user profile template or upload profile details for users who already exist in Supabase Authentication.
+            Download the existing user template and upload employee details. New employees will receive a Supabase email invitation automatically.
         </p>
         <p class="text-xs text-amber-700 mb-4">
-            Important: Create/invite the user in Authentication first. Use that user's exact Auth UID as auth_user_id. This upload does not create login accounts or passwords.
+            For new employees, leave auth_user_id blank. The system creates the Auth account, sends an email invitation, and links the generated UID automatically. Existing Auth UIDs may be supplied to update a verified existing user profile.
         </p>
         <div class="flex flex-wrap gap-2">
             <button onclick="downloadDataTemplate('user_listing')"
@@ -1222,6 +1234,7 @@ const SUPABASE_KEY =
 "sb_publishable_O8sADHFZRDzlm1J6uFljEA_fZtJfMfA";
 
 const { createClient } = supabase;
+const initialAuthHash = window.location.hash || "";
 
 const db = createClient(
     SUPABASE_URL,
@@ -1236,6 +1249,7 @@ GLOBAL VARIABLES
 let currentUser = null;
 let currentProfile = null;
 let selectedCase = null;
+let needsPasswordSetup = false;
 
 let collectionChart = null;
 let bucketChart = null;
@@ -2638,12 +2652,12 @@ async function uploadUserListing(rows){
     const setStatus = message => { if(status) status.textContent = message; };
 
     if(!currentUser || !currentProfile ||
-       String(currentProfile.role || "").toUpperCase() !== "ADMIN"){
-        setStatus("Upload blocked: only an active ADMIN can upload user listings.");
-        alert("Only an ADMIN can upload user listings.");
+       String(currentProfile.role || "").toUpperCase() !== "ADMIN" ||
+       currentProfile.active === false){
+        setStatus("Upload blocked: only an active ADMIN can invite users.");
+        alert("Only an active ADMIN can upload user listings.");
         return;
     }
-
     if(!Array.isArray(rows) || rows.length === 0){
         setStatus("No user rows found in the file.");
         alert("No user rows found in the file.");
@@ -2655,47 +2669,27 @@ async function uploadUserListing(rows){
         "COLLECTION_OFFICER", "MIS_USER", "LEGAL_USER", "REPO_MANAGER",
         "YARD_MANAGER", "FINANCE_USER"
     ]);
-
     const cleanRows = [];
     const rowErrors = [];
+    const seenEmails = new Set();
 
     rows.forEach((rawRow, index) => {
         const row = normalizeRowKeys(rawRow);
-        const authId = String(getFirstValue(row, [
-            "auth_user_id", "auth user id", "user_uid", "user uid", "id"
-        ])).trim();
-        const email = String(getFirstValue(row, ["email", "user_email", "work_email"]))
-            .trim().toLowerCase();
-        const fullName = String(getFirstValue(row, ["full_name", "full name", "user_name", "name"]))
-            .trim();
-        const role = String(getFirstValue(row, ["role", "user_role"]) || "COLLECTION_OFFICER")
-            .trim().toUpperCase().replace(/[\s-]+/g, "_");
-
-        // Supabase Auth user IDs are UUIDs and must match Authentication > Users.
+        const authId = String(getFirstValue(row, ["auth_user_id", "auth user id", "user_uid", "user uid", "id"]) || "").trim();
+        const email = String(getFirstValue(row, ["email", "user_email", "work_email"]) || "").trim().toLowerCase();
+        const fullName = String(getFirstValue(row, ["full_name", "full name", "user_name", "name"]) || "").trim();
+        const role = String(getFirstValue(row, ["role", "user_role"]) || "COLLECTION_OFFICER").trim().toUpperCase().replace(/[\s-]+/g, "_");
         const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-        if(!authId || !uuidPattern.test(authId)){
-            rowErrors.push(`Row ${index + 2}: auth_user_id must be the exact UUID from Supabase Authentication > Users.`);
-            return;
-        }
-        if(!email){
-            rowErrors.push(`Row ${index + 2}: email is required.`);
-            return;
-        }
-        if(!fullName){
-            rowErrors.push(`Row ${index + 2}: full_name is required.`);
-            return;
-        }
-        if(!allowedRoles.has(role)){
-            rowErrors.push(`Row ${index + 2}: unsupported role "${role}".`);
-            return;
-        }
-
-        const activeRaw = String(getFirstValue(row, ["active", "is_active", "status"]) || "true")
-            .trim().toLowerCase();
+        if(authId && !uuidPattern.test(authId)) rowErrors.push(`Row ${index + 2}: auth_user_id must be blank for a new invite or an exact Auth UID for an existing user.`);
+        if(!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) rowErrors.push(`Row ${index + 2}: enter a valid email address.`);
+        if(!fullName) rowErrors.push(`Row ${index + 2}: full_name is required.`);
+        if(!allowedRoles.has(role)) rowErrors.push(`Row ${index + 2}: unsupported role "${role}".`);
+        if(email && seenEmails.has(email)) rowErrors.push(`Row ${index + 2}: duplicate email "${email}" in this file.`);
+        if(email) seenEmails.add(email);
+        const activeRaw = String(getFirstValue(row, ["active", "is_active", "status"]) || "true").trim().toLowerCase();
         const active = !["false", "0", "no", "inactive", "disabled"].includes(activeRaw);
-
         cleanRows.push({
-            id: authId,
+            auth_user_id: authId || null,
             employee_code: String(getFirstValue(row, ["employee_code", "employee code", "emp_code"]) || "").trim() || null,
             full_name: fullName,
             email,
@@ -2709,48 +2703,39 @@ async function uploadUserListing(rows){
     });
 
     if(rowErrors.length){
-        const message = rowErrors.slice(0, 8).join("\n") +
-            (rowErrors.length > 8 ? `\n...and ${rowErrors.length - 8} more error(s).` : "");
+        const message = rowErrors.slice(0, 10).join("\n") + (rowErrors.length > 10 ? `\n...and ${rowErrors.length - 10} more error(s).` : "");
         setStatus(`Upload stopped: ${rowErrors.length} validation error(s).`);
         alert("User listing was not uploaded. Please correct these errors:\n\n" + message);
         return;
     }
 
     const confirmed = confirm(
-        `Upload ${cleanRows.length} user profile row(s)?\n\n` +
-        "Existing profiles with the same Auth UID will be updated. No Auth accounts or passwords will be created."
+        `Process ${cleanRows.length} user row(s)?\n\n` +
+        "Rows with a blank auth_user_id will create an Auth account and send an email invitation. Rows with an Auth UID will update the profile only after the server verifies the UID/email match."
     );
-    if(!confirmed){
-        setStatus("Upload cancelled.");
-        return;
+    if(!confirmed){ setStatus("Upload cancelled."); return; }
+
+    setStatus(`Sending ${cleanRows.length} row(s) securely to Supabase...`);
+    try{
+        const { data, error } = await db.functions.invoke("bulk-invite-users", {
+            body: { users: cleanRows }
+        });
+        if(error) throw error;
+        const results = Array.isArray(data?.results) ? data.results : [];
+        const ok = results.filter(x => x.status === "invited" || x.status === "profile_updated").length;
+        const failed = results.filter(x => x.status === "error");
+        const details = results.map(x => `${x.email || "(unknown email)"}: ${x.message || x.status}`).join("\n");
+        const summary = `Completed. Successful: ${ok}; failed: ${failed.length}.` + (details ? `\n\n${details}` : "");
+        setStatus(summary);
+        alert(summary);
+        if(typeof loadAdminStats === "function") await loadAdminStats();
+    }catch(error){
+        console.error("Bulk user invitation failed:", error);
+        const message = "Bulk user invitation failed: " + (error.message || String(error)) +
+            "\nCheck that the bulk-invite-users Edge Function is deployed and its secrets are configured.";
+        setStatus(message);
+        alert(message);
     }
-
-    setStatus(`Uploading ${cleanRows.length} user profile row(s)...`);
-    const chunkSize = 100;
-    let uploaded = 0;
-
-    for(let i = 0; i < cleanRows.length; i += chunkSize){
-        const batch = cleanRows.slice(i, i + chunkSize);
-        const { error } = await db
-            .from("profiles")
-            .upsert(batch, { onConflict: "id" });
-
-        if(error){
-            console.error("User listing upload failed:", error);
-            const message = "User listing upload failed: " + error.message +
-                "\nCheck that each Auth UID exists and your profiles table permits ADMIN inserts/updates.";
-            setStatus(message);
-            alert(message);
-            return;
-        }
-
-        uploaded += batch.length;
-        setStatus(`Uploaded ${uploaded} / ${cleanRows.length} user profiles...`);
-    }
-
-    setStatus(`Success: ${uploaded} user profile row(s) uploaded.`);
-    alert(`User listing uploaded successfully. Profiles processed: ${uploaded}.`);
-    if(typeof loadAdminStats === "function") await loadAdminStats();
 }
 
 async function uploadDataCenter(type, file){
@@ -3299,16 +3284,38 @@ AUTH SESSION
 
 async function restoreSession(){
 
-    const { data } =
-        await db.auth.getSession();
+    // Supabase invitation links redirect back with type=invite in the URL hash.
+    const hash = initialAuthHash || window.location.hash || "";
+    needsPasswordSetup = /(?:^|[&#])type=(invite|recovery)(?:&|$)/i.test(hash);
+    const { data } = await db.auth.getSession();
 
     if(data && data.session){
-
         currentUser = data.session.user;
+        if(needsPasswordSetup){
+            document.getElementById("loginScreen").classList.add("hidden");
+            document.getElementById("invitePasswordScreen").classList.remove("hidden");
+            return;
+        }
         await loadProfile();
-
     }
+}
 
+async function finishInvitePasswordSetup(){
+    const password = document.getElementById("inviteNewPassword").value;
+    const confirmPassword = document.getElementById("inviteConfirmPassword").value;
+    const message = document.getElementById("invitePasswordMessage");
+    message.className = "text-sm mt-3 text-red-600";
+    if(!password || password.length < 8){ message.textContent = "Use a password with at least 8 characters."; return; }
+    if(password !== confirmPassword){ message.textContent = "The passwords do not match."; return; }
+    message.textContent = "Saving your password...";
+    const { data, error } = await db.auth.updateUser({ password });
+    if(error){ message.textContent = "Could not set password: " + error.message; return; }
+    currentUser = data.user || currentUser;
+    needsPasswordSetup = false;
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    document.getElementById("invitePasswordScreen").classList.add("hidden");
+    document.getElementById("loginScreen").classList.add("hidden");
+    await loadProfile();
 }
 
 restoreSession();
@@ -3325,4 +3332,3 @@ document
 
 </body>
 </html>
-
