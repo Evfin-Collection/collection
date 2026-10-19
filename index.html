@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>GFL Collection Control Tower</title>
+<title>EvFin Collection Control Tower</title>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -75,6 +75,21 @@ th{
     font-size:12px;
     background:#e5e7eb;
 }
+
+/* Advanced responsive UI */
+body{background:linear-gradient(135deg,#f3f6fb 0%,#eef2ff 100%);}
+.card{border:1px solid rgba(226,232,240,.85);transition:box-shadow .18s ease,transform .18s ease;}
+.card:hover{box-shadow:0 12px 28px rgba(15,23,42,.08);}
+button{transition:background-color .15s ease,transform .15s ease,box-shadow .15s ease;}
+button:active{transform:translateY(1px);}
+input,select,textarea{outline:none;transition:border-color .15s ease,box-shadow .15s ease;}
+input:focus,select:focus,textarea:focus{border-color:#6366f1!important;box-shadow:0 0 0 3px rgba(99,102,241,.13);}
+.sidebar{background:linear-gradient(180deg,#0f172a 0%,#172554 100%);box-shadow:8px 0 30px rgba(15,23,42,.08);}
+.sidebar button{color:#e2e8f0;}
+.sidebar button:hover{background:rgba(148,163,184,.16);}
+.kpi{letter-spacing:-.04em;color:#0f172a;}
+th{position:sticky;top:0;z-index:1;}
+@media(max-width:768px){.sidebar{width:100%;min-height:auto;}#app>.flex{display:block;}main{padding:1rem!important;}.sidebar button{width:calc(50% - 4px);display:inline-block;} .kpi{font-size:24px;}}
 </style>
 
 </head>
@@ -93,7 +108,7 @@ LOGIN
         <div class="text-center mb-6">
 
             <div class="text-3xl font-bold">
-                GFL Collection
+                EvFin Collection
             </div>
 
             <p class="text-gray-500">
@@ -106,7 +121,7 @@ LOGIN
             id="loginEmail"
             class="w-full border rounded-lg p-3 mb-3"
             placeholder="Email"
-            value="admin@gfl.local">
+            autocomplete="username">
 
         <input
             id="loginPassword"
@@ -143,7 +158,7 @@ APPLICATION
 <aside class="sidebar p-4">
 
     <h1 class="text-xl font-bold mb-6">
-        GFL Control Tower
+        EvFin Control Tower
     </h1>
 
     <button onclick="showPage('dashboard')">
@@ -522,21 +537,28 @@ Allocation Management
 </h3>
 
 <p class="text-gray-500 mb-5">
-Bulk allocation and reallocation module.
+Bulk allocation and reallocation module. Download the approved template, fill the data, then select the file for validation.
 </p>
 
-<input type="file"
-       id="allocationFile"
-       accept=".xlsx,.xls,.csv"
-       class="border p-2">
-
-<button
-onclick="uploadAllocation()"
-class="bg-blue-600 text-white px-5 py-2 rounded-lg ml-2">
-
-Upload
-
-</button>
+<div class="allocation-actions" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:18px 0 10px;">
+  <button type="button" onclick="downloadAllocationDump()"
+          style="display:inline-flex;align-items:center;gap:8px;background:#047857;color:#ffffff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;box-shadow:0 3px 8px rgba(4,120,87,.2);">
+    ⬇ Download Allocation Dump
+  </button>
+  <button type="button" onclick="downloadAllocationTemplate()"
+          style="display:inline-flex;align-items:center;gap:8px;background:#4f46e5;color:#ffffff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;">
+    Download Blank Template
+  </button>
+  <label for="allocationFile" style="display:inline-flex;align-items:center;gap:8px;background:#ffffff;color:#1e293b;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer;">
+    Choose Allocation File
+    <input type="file" id="allocationFile" accept=".xlsx,.xls,.csv" style="max-width:230px;border:0;padding:2px;background:transparent;">
+  </label>
+  <button type="button" onclick="uploadAllocation()"
+          style="display:inline-flex;align-items:center;gap:8px;background:#2563eb;color:#ffffff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;cursor:pointer;">
+    Upload / Validate
+  </button>
+</div>
+<p class="text-xs text-gray-500 mt-3">Download Allocation Dump exports records currently available in the <strong>collection_cases</strong> table. Download Blank Template creates an empty Excel file with the required allocation columns. Upload / Validate currently checks the uploaded file; it does not save allocations to the database.</p>
 
 </div>
 
@@ -1175,7 +1197,7 @@ const SUPABASE_URL =
 "https://bhukbtgkbtomaccsejqz.supabase.co";
 
 const SUPABASE_KEY =
-"sb_publishable_O8sADHFZRDzlm1J6uFljEA_fZtJfMfA";
+"YOUR-PUBLISHABLE-KEY";
 
 const { createClient } = supabase;
 
@@ -1248,12 +1270,20 @@ async function loadProfile(){
         .eq("id", currentUser.id)
         .single();
 
-    if(error){
+    if(error || !data){
+        const message = document.getElementById("loginMessage");
+        message.textContent = error
+            ? `Could not load your profile: ${error.message}. Check the profiles table and its SELECT policy.`
+            : "Your user profile was not found. Ask an administrator to check the profiles table.";
+        await db.auth.signOut();
+        currentUser = null;
+        return;
+    }
 
-        alert(
-            "Profile not found. Create profile row in Supabase."
-        );
-
+    if(data.active === false){
+        document.getElementById("loginMessage").textContent = "Your account is inactive. Please contact the administrator.";
+        await db.auth.signOut();
+        currentUser = null;
         return;
     }
 
@@ -1270,7 +1300,7 @@ async function loadProfile(){
     document
         .getElementById("userInfo")
         .textContent =
-        `${data.full_name} • ${data.role}`;
+        `${data.full_name || data.email || currentUser.email} • ${String(data.role || "COLLECTION_OFFICER").replaceAll("_", " ")}`;
 
     const userRole = String(data.role || "").toUpperCase();
 
@@ -2899,6 +2929,123 @@ async function uploadCashfreeUnique(rows, status){
 }
 
 /* ============================================================
+ALLOCATION DUMP EXPORT
+Exports current rows from collection_cases to an Excel workbook.
+============================================================ */
+
+function allocationValue(row, candidateKeys){
+    for(const key of candidateKeys){
+        if(row && row[key] !== undefined && row[key] !== null){
+            return row[key];
+        }
+    }
+    return "";
+}
+
+async function downloadAllocationDump(){
+    if(typeof XLSX === "undefined"){
+        alert("Excel download library did not load. Refresh the page and try again.");
+        return;
+    }
+
+    const pageSize = 1000;
+    let offset = 0;
+    const sourceRows = [];
+
+    try{
+        while(true){
+            const { data, error } = await db
+                .from("collection_cases")
+                .select("*")
+                .range(offset, offset + pageSize - 1);
+
+            if(error){
+                console.error("Allocation dump query failed:", error);
+                alert("Could not download allocation dump: " + error.message +
+                      "\nPlease check that collection_cases exists and your user has permission to read it.");
+                return;
+            }
+
+            const batch = data || [];
+            sourceRows.push(...batch);
+            if(batch.length < pageSize) break;
+            offset += pageSize;
+        }
+
+        if(sourceRows.length === 0){
+            alert("No records were found in collection_cases, so there is no allocation dump to download yet.");
+            return;
+        }
+
+        const headers = [
+            "Case ID", "LAN", "Customer ID", "Customer Name", "State", "Zone",
+            "Branch", "Product", "DPD", "Bucket", "POS", "Outstanding",
+            "Agency Code", "Agency Name", "TL ID", "TL Name", "Officer ID",
+            "Officer Name", "Allocation Date", "Allocation Type", "Allocation Status"
+        ];
+
+        const exportRows = sourceRows.map(row => ({
+            "Case ID": allocationValue(row, ["case_id", "caseid", "id"]),
+            "LAN": allocationValue(row, ["lan", "LAN", "account_no", "loan_account_no"]),
+            "Customer ID": allocationValue(row, ["customer_id", "customerid", "customer_code", "cif"]),
+            "Customer Name": allocationValue(row, ["customer_name", "name"]),
+            "State": allocationValue(row, ["state"]),
+            "Zone": allocationValue(row, ["zone"]),
+            "Branch": allocationValue(row, ["branch"]),
+            "Product": allocationValue(row, ["product", "product_name"]),
+            "DPD": allocationValue(row, ["dpd"]),
+            "Bucket": allocationValue(row, ["bucket"]),
+            "POS": allocationValue(row, ["pos", "POS"]),
+            "Outstanding": allocationValue(row, ["outstanding", "total_outstanding"]),
+            "Agency Code": allocationValue(row, ["agency_code"]),
+            "Agency Name": allocationValue(row, ["agency_name"]),
+            "TL ID": allocationValue(row, ["tl_id"]),
+            "TL Name": allocationValue(row, ["tl_name"]),
+            "Officer ID": allocationValue(row, ["officer_id", "collection_officer_id"]),
+            "Officer Name": allocationValue(row, ["officer_name", "collection_officer_name"]),
+            "Allocation Date": allocationValue(row, ["allocation_date"]),
+            "Allocation Type": allocationValue(row, ["allocation_type"]),
+            "Allocation Status": allocationValue(row, ["allocation_status", "collection_status", "status"])
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportRows, { header: headers });
+        worksheet["!cols"] = headers.map(header => ({ wch: Math.max(15, header.length + 2) }));
+        worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Allocation Dump");
+        const localDate = new Date().toLocaleDateString("en-CA");
+        XLSX.writeFile(workbook, `EvFin_Allocation_Dump_${localDate}.xlsx`);
+        alert(`Allocation dump downloaded successfully. Records exported: ${sourceRows.length}.`);
+    }catch(err){
+        console.error("Allocation dump export error:", err);
+        alert("Unable to download allocation dump. " + (err.message || "Please try again."));
+    }
+}
+
+/* ============================================================
+ALLOCATION TEMPLATE DOWNLOAD
+============================================================ */
+
+function downloadAllocationTemplate(){
+    const headers = [
+        "Case ID", "LAN", "Customer ID", "Customer Name",
+        "State", "Zone", "Branch", "Product", "DPD", "Bucket",
+        "POS", "Outstanding", "Agency Code", "Agency Name",
+        "TL ID", "TL Name", "Officer ID", "Officer Name",
+        "Allocation Date", "Allocation Type", "Allocation Status"
+    ];
+
+    const sample = {};
+    headers.forEach(header => sample[header] = "");
+    const worksheet = XLSX.utils.json_to_sheet([sample]);
+    worksheet["!cols"] = headers.map(h => ({ wch: Math.max(16, h.length + 2) }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Allocation Dump");
+    XLSX.writeFile(workbook, "EvFin_Allocation_Dump_Template.xlsx");
+}
+
+/* ============================================================
 ALLOCATION FILE
 ============================================================ */
 
@@ -3022,3 +3169,4 @@ document
 
 </body>
 </html>
+
