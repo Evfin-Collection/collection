@@ -1022,6 +1022,28 @@ DATA CENTER
         </div>
     </div>
 
+    <div class="card">
+        <h4 class="font-bold text-lg">User Listing</h4>
+        <p class="text-sm text-gray-500 mt-1 mb-2">
+            Download the user profile template or upload profile details for users who already exist in Supabase Authentication.
+        </p>
+        <p class="text-xs text-amber-700 mb-4">
+            Important: Create/invite the user in Authentication first. Use that user's exact Auth UID as auth_user_id. This upload does not create login accounts or passwords.
+        </p>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="downloadDataTemplate('user_listing')"
+                    class="border px-4 py-2 rounded-lg">
+                Download Template
+            </button>
+            <label class="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer">
+                Upload
+                <input type="file" hidden accept=".xlsx,.xls,.csv"
+                       onchange="uploadDataCenter('user_listing', this.files[0]); this.value=''">
+            </label>
+        </div>
+        <p id="userListingUploadStatus" class="text-sm mt-3 text-gray-600" aria-live="polite"></p>
+    </div>
+
 </div>
 
 <div class="card mt-5">
@@ -1197,7 +1219,7 @@ const SUPABASE_URL =
 "https://bhukbtgkbtomaccsejqz.supabase.co";
 
 const SUPABASE_KEY =
-"sb_publishable_O8sADHFZRDzlm1J6uFljEA_fZtJfMfA";
+"YOUR-PUBLISHABLE-KEY";
 
 const { createClient } = supabase;
 
@@ -2417,6 +2439,11 @@ const DATA_CENTER_TEMPLATES = {
         "transaction_id","lan","customer_name","customer_phone",
         "payment_date","amount","payment_mode","reference",
         "remarks"
+    ],
+
+    user_listing: [
+        "auth_user_id","employee_code","full_name","email","role",
+        "mobile","state","zone","branch","active"
     ]
 };
 
@@ -2590,16 +2617,140 @@ function downloadDataTemplate(type){
         "Template"
     );
 
+    const templateFileNames = {
+        cashfree_transactions: "Cashfree_Transaction_Template.xlsx",
+        user_listing: "EvFin_User_Listing_Template.xlsx"
+    };
+
     const fileName =
-        type === "cashfree_transactions"
-        ? "Cashfree_Transaction_Template.xlsx"
-        : `${type}_Template.xlsx`;
+        templateFileNames[type] || `${type}_Template.xlsx`;
 
     XLSX.writeFile(
         workbook,
         fileName
     );
 
+}
+
+async function uploadUserListing(rows){
+
+    const status = document.getElementById("userListingUploadStatus");
+    const setStatus = message => { if(status) status.textContent = message; };
+
+    if(!currentUser || !currentProfile ||
+       String(currentProfile.role || "").toUpperCase() !== "ADMIN"){
+        setStatus("Upload blocked: only an active ADMIN can upload user listings.");
+        alert("Only an ADMIN can upload user listings.");
+        return;
+    }
+
+    if(!Array.isArray(rows) || rows.length === 0){
+        setStatus("No user rows found in the file.");
+        alert("No user rows found in the file.");
+        return;
+    }
+
+    const allowedRoles = new Set([
+        "ADMIN", "NCH", "ZCH", "SCH", "AGENCY_MANAGER", "COLLECTION_TL",
+        "COLLECTION_OFFICER", "MIS_USER", "LEGAL_USER", "REPO_MANAGER",
+        "YARD_MANAGER", "FINANCE_USER"
+    ]);
+
+    const cleanRows = [];
+    const rowErrors = [];
+
+    rows.forEach((rawRow, index) => {
+        const row = normalizeRowKeys(rawRow);
+        const authId = String(getFirstValue(row, [
+            "auth_user_id", "auth user id", "user_uid", "user uid", "id"
+        ])).trim();
+        const email = String(getFirstValue(row, ["email", "user_email", "work_email"]))
+            .trim().toLowerCase();
+        const fullName = String(getFirstValue(row, ["full_name", "full name", "user_name", "name"]))
+            .trim();
+        const role = String(getFirstValue(row, ["role", "user_role"]) || "COLLECTION_OFFICER")
+            .trim().toUpperCase().replace(/[\s-]+/g, "_");
+
+        // Supabase Auth user IDs are UUIDs and must match Authentication > Users.
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if(!authId || !uuidPattern.test(authId)){
+            rowErrors.push(`Row ${index + 2}: auth_user_id must be the exact UUID from Supabase Authentication > Users.`);
+            return;
+        }
+        if(!email){
+            rowErrors.push(`Row ${index + 2}: email is required.`);
+            return;
+        }
+        if(!fullName){
+            rowErrors.push(`Row ${index + 2}: full_name is required.`);
+            return;
+        }
+        if(!allowedRoles.has(role)){
+            rowErrors.push(`Row ${index + 2}: unsupported role "${role}".`);
+            return;
+        }
+
+        const activeRaw = String(getFirstValue(row, ["active", "is_active", "status"]) || "true")
+            .trim().toLowerCase();
+        const active = !["false", "0", "no", "inactive", "disabled"].includes(activeRaw);
+
+        cleanRows.push({
+            id: authId,
+            employee_code: String(getFirstValue(row, ["employee_code", "employee code", "emp_code"]) || "").trim() || null,
+            full_name: fullName,
+            email,
+            role,
+            mobile: String(getFirstValue(row, ["mobile", "phone", "phone_number"]) || "").trim() || null,
+            state: String(getFirstValue(row, ["state"]) || "").trim() || null,
+            zone: String(getFirstValue(row, ["zone"]) || "").trim() || null,
+            branch: String(getFirstValue(row, ["branch"]) || "").trim() || null,
+            active
+        });
+    });
+
+    if(rowErrors.length){
+        const message = rowErrors.slice(0, 8).join("\n") +
+            (rowErrors.length > 8 ? `\n...and ${rowErrors.length - 8} more error(s).` : "");
+        setStatus(`Upload stopped: ${rowErrors.length} validation error(s).`);
+        alert("User listing was not uploaded. Please correct these errors:\n\n" + message);
+        return;
+    }
+
+    const confirmed = confirm(
+        `Upload ${cleanRows.length} user profile row(s)?\n\n` +
+        "Existing profiles with the same Auth UID will be updated. No Auth accounts or passwords will be created."
+    );
+    if(!confirmed){
+        setStatus("Upload cancelled.");
+        return;
+    }
+
+    setStatus(`Uploading ${cleanRows.length} user profile row(s)...`);
+    const chunkSize = 100;
+    let uploaded = 0;
+
+    for(let i = 0; i < cleanRows.length; i += chunkSize){
+        const batch = cleanRows.slice(i, i + chunkSize);
+        const { error } = await db
+            .from("profiles")
+            .upsert(batch, { onConflict: "id" });
+
+        if(error){
+            console.error("User listing upload failed:", error);
+            const message = "User listing upload failed: " + error.message +
+                "\nCheck that each Auth UID exists and your profiles table permits ADMIN inserts/updates.";
+            setStatus(message);
+            alert(message);
+            return;
+        }
+
+        uploaded += batch.length;
+        setStatus(`Uploaded ${uploaded} / ${cleanRows.length} user profiles...`);
+    }
+
+    setStatus(`Success: ${uploaded} user profile row(s) uploaded.`);
+    alert(`User listing uploaded successfully. Profiles processed: ${uploaded}.`);
+    if(typeof loadAdminStats === "function") await loadAdminStats();
 }
 
 async function uploadDataCenter(type, file){
@@ -2668,6 +2819,11 @@ async function uploadDataCenter(type, file){
             await uploadCashfreeUnique(rows, status);
             return;
 
+        }
+
+        if(type === "user_listing"){
+            await uploadUserListing(rows);
+            return;
         }
 
         const tableMap = {
